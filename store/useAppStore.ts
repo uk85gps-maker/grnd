@@ -8,6 +8,11 @@ interface SetLog {
 }
 
 interface AppState {
+  // Profile
+  dob: string | null
+  setDob: (dob: string) => void
+  getAge: () => number | null
+
   // Workout
   activeDay: 'push' | 'pull' | 'legs'
   setActiveDay: (day: 'push' | 'pull' | 'legs') => void
@@ -24,7 +29,22 @@ interface AppState {
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
+      // Profile
+      dob: null,
+      setDob: (dob) => set({ dob }),
+      getAge: () => {
+        const { dob } = get()
+        if (!dob) return null
+        const today = new Date()
+        const birth = new Date(dob)
+        let age = today.getFullYear() - birth.getFullYear()
+        const m = today.getMonth() - birth.getMonth()
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
+        return age
+      },
+
+      // Workout
       activeDay: 'push',
       setActiveDay: (day) => set({ activeDay: day }),
       completedExercises: {},
@@ -43,6 +63,7 @@ export const useAppStore = create<AppState>()(
           return { setLogs: { ...s.setLogs, [exId]: logs } }
         }),
 
+      // Diet
       dietDay: {},
       logMeal: (id) =>
         set((s) => ({
