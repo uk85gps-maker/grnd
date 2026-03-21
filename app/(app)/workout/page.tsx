@@ -12,7 +12,6 @@ import {
   startOfMonth, endOfMonth,
   startOfQuarter, endOfQuarter,
   startOfYear, endOfYear,
-  subDays,
 } from 'date-fns'
 
 interface SetData {
@@ -59,6 +58,117 @@ function totalVolume(sets: ReviewSetLog[]) {
   return sets.reduce(
     (s, l) => s + (l.completed && l.weight_kg && l.reps ? l.weight_kg * l.reps : 0),
     0,
+  )
+}
+
+// ─── BENCHMARKS ───────────────────────────────────────────────────────────────
+// Based on intermediate-to-advanced recreational male lifters aged 40-44
+// who train consistently 3-5x per week. NOT government guidelines.
+// Weekly volume benchmarks in kg:
+const BENCHMARKS = {
+  weekly: { push: 9000, pull: 10000, legs: 13000 },
+  monthly: { push: 36000, pull: 40000, legs: 52000 },
+  quarterly: { push: 108000, pull: 120000, legs: 156000 },
+  yearly: { push: 432000, pull: 480000, legs: 624000 },
+  daily: { push: 2200, pull: 2500, legs: 3200 },
+  'all time': { push: 500000, pull: 560000, legs: 720000 },
+}
+
+// Which day_types belong to each category
+const PUSH_DAYS = ['push']
+const PULL_DAYS = ['pull']
+const LEG_DAYS = ['legs']
+
+function getBarColour(pct: number): string {
+  if (pct >= 80) return '#1D9E75'        // green
+  if (pct >= 45) return '#BA7517'        // amber
+  return '#E24B4A'                       // red
+}
+
+function ComparisonBars({ logs, period }: { logs: WorkoutLog[]; period: string }) {
+  // Calculate actual volume per category from logs
+  const pushVol = logs
+    .filter(l => PUSH_DAYS.includes(l.day_type))
+    .reduce((s, l) => s + totalVolume(l.set_logs), 0)
+  const pullVol = logs
+    .filter(l => PULL_DAYS.includes(l.day_type))
+    .reduce((s, l) => s + totalVolume(l.set_logs), 0)
+  const legVol = logs
+    .filter(l => LEG_DAYS.includes(l.day_type))
+    .reduce((s, l) => s + totalVolume(l.set_logs), 0)
+
+  const bench = BENCHMARKS[period as keyof typeof BENCHMARKS] || BENCHMARKS.weekly
+
+  const bars = [
+    { label: 'PUSH', actual: pushVol, benchmark: bench.push },
+    { label: 'PULL', actual: pullVol, benchmark: bench.pull },
+    { label: 'LEGS', actual: legVol,  benchmark: bench.legs },
+  ]
+
+  const STYLES = ['PPL', 'Powerlifter', 'CrossFit', 'Bodybuilder', 'Athlete']
+
+  return (
+    <div className="mx-[14px] mb-4 bg-[#141414] border border-[#1e1e1e] rounded p-4">
+      {/* Title */}
+      <p className="font-condensed text-[11px] font-semibold tracking-[3px] text-[#444] uppercase mb-3">
+        vs Active Men 40–44
+      </p>
+
+      {/* Style pills — decorative only */}
+      <div className="flex gap-1.5 flex-wrap mb-4">
+        {STYLES.map((s, i) => (
+          <span
+            key={s}
+            className={`font-condensed text-[11px] font-bold tracking-[1px] uppercase px-2.5 py-1 rounded-sm border ${
+              i === 0
+                ? 'bg-[#E24B4A] border-[#E24B4A] text-white'
+                : 'border-[#2a2a2a] text-[#333]'
+            }`}
+          >
+            {s}
+          </span>
+        ))}
+      </div>
+
+      {/* Bars */}
+      <div className="flex flex-col gap-3">
+        {bars.map(({ label, actual, benchmark }) => {
+          const pct = Math.min(Math.round((actual / benchmark) * 100), 100)
+          const colour = getBarColour(pct)
+          const actualDisplay = actual >= 1000
+            ? `${(actual / 1000).toFixed(1)}t`
+            : `${actual}kg`
+          const benchDisplay = benchmark >= 1000
+            ? `${(benchmark / 1000).toFixed(0)}t`
+            : `${benchmark}kg`
+
+          return (
+            <div key={label}>
+              <div className="flex justify-between items-end mb-1">
+                <span className="font-condensed text-[13px] font-bold tracking-[1px] text-white uppercase">
+                  {label}
+                </span>
+                <span className="text-[11px] text-[#666]">
+                  {actualDisplay} <span className="text-[#333]">/ {benchDisplay}</span>
+                </span>
+              </div>
+              <div className="h-[6px] bg-[#1a1a1a] rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${pct}%`, backgroundColor: colour }}
+                />
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-[10px]" style={{ color: colour }}>
+                  {pct}%
+                </span>
+                <span className="text-[10px] text-[#333]">benchmark</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -199,6 +309,7 @@ function ReviewPanel() {
 
   return (
     <div>
+      {/* Period tabs */}
       <div className="flex gap-1 overflow-x-auto px-[14px] pb-2 mb-2 scrollbar-none">
         {REVIEW_PERIODS.map(p => (
           <button
@@ -215,6 +326,7 @@ function ReviewPanel() {
         ))}
       </div>
 
+      {/* Summary bar */}
       {!loading && logs.length > 0 && (
         <div className="flex gap-4 mx-[14px] mb-4 p-3 bg-[#141414] border border-[#1e1e1e] rounded">
           <div className="text-center flex-1">
@@ -236,6 +348,12 @@ function ReviewPanel() {
         </div>
       )}
 
+      {/* Comparison bars — always visible */}
+      {!loading && (
+        <ComparisonBars logs={logs} period={period} />
+      )}
+
+      {/* Session list */}
       {loading ? (
         <p className="text-[#444] text-sm text-center py-8">Loading...</p>
       ) : logs.length === 0 ? (
